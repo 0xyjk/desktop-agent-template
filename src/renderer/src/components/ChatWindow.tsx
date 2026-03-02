@@ -1,5 +1,5 @@
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
+import { DefaultChatTransport, isStaticToolUIPart } from 'ai'
 import type { PromptInputMessage } from '@renderer/components/ai-elements/prompt-input'
 import {
   Conversation,
@@ -8,6 +8,8 @@ import {
   ConversationScrollButton
 } from '@renderer/components/ai-elements/conversation'
 import { Message, MessageContent, MessageResponse } from '@renderer/components/ai-elements/message'
+import { Terminal } from '@renderer/components/ai-elements/terminal'
+import { getStatusBadge } from '@renderer/components/ai-elements/tool'
 import { Spinner } from '@renderer/components/ui/spinner'
 import {
   PromptInput,
@@ -44,12 +46,15 @@ export default function ChatWindow() {
   )
 
   const isStreaming = status === 'streaming' || status === 'submitted'
+  const lastMsg = messages.at(-1)
+  const showSpinner =
+    isStreaming && !(lastMsg?.role === 'assistant' && lastMsg.parts.at(-1)?.type === 'text')
 
   return (
     <div className="relative flex size-full flex-col divide-y overflow-hidden">
       <Conversation>
         <ConversationContent>
-          {messages.length === 0 ? (
+          {messages.length === 0 && !isStreaming ? (
             <ConversationEmptyState
               title="开始和 AI 对话吧"
               description="在下方输入消息，按回车发送"
@@ -64,29 +69,62 @@ export default function ChatWindow() {
                 return (
                   <Message key={message.id} from={message.role}>
                     <MessageContent>
-                      {message.parts.map((part, i) =>
-                        part.type === 'text' ? (
-                          <MessageResponse
-                            key={`${message.id}-${i}`}
-                            mode={isLastAssistant ? 'streaming' : 'static'}
-                            animated={isLastAssistant}
-                          >
-                            {part.text}
-                          </MessageResponse>
-                        ) : null
-                      )}
+                      {message.parts.map((part, i) => {
+                        switch (part.type) {
+                          case 'text':
+                            return (
+                              <MessageResponse
+                                key={`${message.id}-${i}`}
+                                mode={isLastAssistant ? 'streaming' : 'static'}
+                                animated={isLastAssistant}
+                              >
+                                {part.text}
+                              </MessageResponse>
+                            )
+                          default:
+                            if (isStaticToolUIPart(part)) {
+                              const isRunning =
+                                part.state === 'input-available' ||
+                                part.state === 'input-streaming'
+                              const output = part.output as
+                                | { stdout?: string; stderr?: string }
+                                | undefined
+                              const terminalOutput = part.errorText
+                                ? `Error: ${part.errorText}`
+                                : output?.stderr
+                                  ? `${output.stdout ?? ''}\n\nstderr:\n${output.stderr}`
+                                  : (output?.stdout ?? '')
+
+                              return (
+                                <Terminal
+                                  key={`${message.id}-${i}`}
+                                  output={terminalOutput}
+                                  isStreaming={isRunning}
+                                >
+                                  <div className="flex items-center justify-between border-zinc-800 border-b px-4 py-2">
+                                    <code className="text-xs text-zinc-300">
+                                      $ {(part.input as { command?: string })?.command ?? 'shell'}
+                                    </code>
+                                    {getStatusBadge(part.state)}
+                                  </div>
+                                  {!isRunning && terminalOutput && (
+                                    <div className="max-h-64 overflow-auto p-4 font-mono text-xs leading-relaxed">
+                                      <pre className="whitespace-pre-wrap break-words text-zinc-100">
+                                        {terminalOutput}
+                                      </pre>
+                                    </div>
+                                  )}
+                                </Terminal>
+                              )
+                            }
+                            return null
+                        }
+                      })}
                     </MessageContent>
                   </Message>
                 )
               })}
-              {/* 已提交但 AI 尚未开始回复时，显示加载指示器 */}
-              {status === 'submitted' && (
-                <Message from="assistant">
-                  <MessageContent>
-                    <Spinner />
-                  </MessageContent>
-                </Message>
-              )}
+              {showSpinner && <Spinner />}
             </>
           )}
         </ConversationContent>

@@ -4,8 +4,9 @@ config()
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
-import { streamText, UIMessage, convertToModelMessages } from 'ai'
+import { ToolLoopAgent, createAgentUIStreamResponse, UIMessage } from 'ai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { shellTool } from './tools/shell'
 
 // 创建 OpenAI 兼容的 provider
 // 可通过环境变量切换不同 provider（DeepSeek、Ollama 等）
@@ -13,6 +14,11 @@ const provider = createOpenAICompatible({
   name: 'custom',
   apiKey: process.env.LLM_API_KEY || '',
   baseURL: process.env.LLM_BASE_URL || 'https://api.openai.com/v1'
+})
+
+const agent = new ToolLoopAgent({
+  model: provider(process.env.LLM_MODEL || ''),
+  tools: { shell: shellTool }
 })
 
 const app = new Hono()
@@ -24,13 +30,10 @@ app.use('/api/*', cors())
 app.post('/api/chat', async (c) => {
   const { messages }: { messages: UIMessage[] } = await c.req.json()
 
-  const result = streamText({
-    model: provider(process.env.LLM_MODEL || ''),
-    system: 'You are a helpful assistant.',
-    messages: await convertToModelMessages(messages)
+  return createAgentUIStreamResponse({
+    agent,
+    uiMessages: messages
   })
-
-  return result.toUIMessageStreamResponse()
 })
 
 // 启动服务器并返回实际监听的端口
