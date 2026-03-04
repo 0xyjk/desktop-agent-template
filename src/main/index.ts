@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { startServer } from './server'
+import { startServer, closeMCP } from './server'
 
 let serverPort: number
 
@@ -38,7 +38,7 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   // 先启动 Hono API 服务器
-  serverPort = await startServer()
+  serverPort = await startServer(3315, app.getPath('userData'))
 
   electronApp.setAppUserModelId('com.electron')
 
@@ -57,4 +57,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', async () => {
+  await closeMCP()
 })

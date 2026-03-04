@@ -1,5 +1,5 @@
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport, isStaticToolUIPart } from 'ai'
+import { DefaultChatTransport } from 'ai'
 import type { PromptInputMessage } from '@renderer/components/ai-elements/prompt-input'
 import {
   Conversation,
@@ -9,7 +9,14 @@ import {
 } from '@renderer/components/ai-elements/conversation'
 import { Message, MessageContent, MessageResponse } from '@renderer/components/ai-elements/message'
 import { Terminal } from '@renderer/components/ai-elements/terminal'
-import { getStatusBadge } from '@renderer/components/ai-elements/tool'
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+  getStatusBadge
+} from '@renderer/components/ai-elements/tool'
 import { Spinner } from '@renderer/components/ui/spinner'
 import {
   PromptInput,
@@ -19,9 +26,9 @@ import {
   PromptInputTools,
   PromptInputSubmit
 } from '@renderer/components/ai-elements/prompt-input'
+import MCPSettings from './MCPSettings'
 import { useCallback, useState } from 'react'
 
-// Hono 服务器地址
 const API_URL = 'http://localhost:3315/api/chat'
 
 export default function ChatWindow() {
@@ -62,7 +69,6 @@ export default function ChatWindow() {
           ) : (
             <>
               {messages.map((message, index) => {
-                // 最后一条 assistant 消息 + 正在流式输出时，启用 streaming 模式和动画
                 const isLastAssistant =
                   message.role === 'assistant' && index === messages.length - 1 && isStreaming
 
@@ -81,42 +87,55 @@ export default function ChatWindow() {
                                 {part.text}
                               </MessageResponse>
                             )
-                          default:
-                            if (isStaticToolUIPart(part)) {
-                              const isRunning =
-                                part.state === 'input-available' ||
-                                part.state === 'input-streaming'
-                              const output = part.output as
-                                | { stdout?: string; stderr?: string }
-                                | undefined
-                              const terminalOutput = part.errorText
-                                ? `Error: ${part.errorText}`
-                                : output?.stderr
-                                  ? `${output.stdout ?? ''}\n\nstderr:\n${output.stderr}`
-                                  : (output?.stdout ?? '')
-
-                              return (
-                                <Terminal
-                                  key={`${message.id}-${i}`}
-                                  output={terminalOutput}
-                                  isStreaming={isRunning}
-                                >
-                                  <div className="flex items-center justify-between border-zinc-800 border-b px-4 py-2">
-                                    <code className="text-xs text-zinc-300">
-                                      $ {(part.input as { command?: string })?.command ?? 'shell'}
-                                    </code>
-                                    {getStatusBadge(part.state)}
+                          case 'tool-shell': {
+                            const isRunning =
+                              part.state === 'input-available' ||
+                              part.state === 'input-streaming'
+                            const output = part.output as
+                              | { stdout?: string; stderr?: string }
+                              | undefined
+                            const terminalOutput = part.errorText
+                              ? `Error: ${part.errorText}`
+                              : output?.stderr
+                                ? `${output.stdout ?? ''}\n\nstderr:\n${output.stderr}`
+                                : (output?.stdout ?? '')
+                            return (
+                              <Terminal
+                                key={`${message.id}-${i}`}
+                                output={terminalOutput}
+                                isStreaming={isRunning}
+                              >
+                                <div className="flex items-center justify-between border-zinc-800 border-b px-4 py-2">
+                                  <code className="text-xs text-zinc-300">
+                                    $ {(part.input as { command?: string })?.command ?? 'shell'}
+                                  </code>
+                                  {getStatusBadge(part.state)}
+                                </div>
+                                {!isRunning && terminalOutput && (
+                                  <div className="max-h-64 overflow-auto p-4 font-mono text-xs leading-relaxed">
+                                    <pre className="whitespace-pre-wrap break-words text-zinc-100">
+                                      {terminalOutput}
+                                    </pre>
                                   </div>
-                                  {!isRunning && terminalOutput && (
-                                    <div className="max-h-64 overflow-auto p-4 font-mono text-xs leading-relaxed">
-                                      <pre className="whitespace-pre-wrap break-words text-zinc-100">
-                                        {terminalOutput}
-                                      </pre>
-                                    </div>
-                                  )}
-                                </Terminal>
-                              )
-                            }
+                                )}
+                              </Terminal>
+                            )
+                          }
+                          case 'dynamic-tool':
+                            return (
+                              <Tool key={`${message.id}-${i}`}>
+                                <ToolHeader
+                                  type={part.type}
+                                  state={part.state}
+                                  toolName={part.toolName}
+                                />
+                                <ToolContent>
+                                  <ToolInput input={part.input} />
+                                  <ToolOutput output={part.output} errorText={part.errorText} />
+                                </ToolContent>
+                              </Tool>
+                            )
+                          default:
                             return null
                         }
                       })}
@@ -141,7 +160,9 @@ export default function ChatWindow() {
             />
           </PromptInputBody>
           <PromptInputFooter>
-            <PromptInputTools />
+            <PromptInputTools>
+              <MCPSettings />
+            </PromptInputTools>
             <PromptInputSubmit status={status} />
           </PromptInputFooter>
         </PromptInput>
