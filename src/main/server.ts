@@ -1,6 +1,8 @@
 import { config } from 'dotenv'
 config()
 
+import { join } from 'path'
+import { homedir } from 'os'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
@@ -16,6 +18,7 @@ import {
   removeServer,
   reconnectServer
 } from './mcp'
+import { initSkills, getSkillsSystemPrompt, useSkillTool, getSkillsList, injectSkillFromCommand } from './skills'
 
 const provider = createOpenAICompatible({
   name: 'custom',
@@ -23,14 +26,23 @@ const provider = createOpenAICompatible({
   baseURL: process.env.LLM_BASE_URL || 'https://api.openai.com/v1'
 })
 
-let agent: ToolLoopAgent
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let agent: ToolLoopAgent<any, any, any>
 
-/** Rebuild agent with current MCP tools. Called on startup and after any server add/remove. */
+/** Rebuild agent with current tools and instructions. Called on startup and after MCP changes. */
 function rebuildAgent(): void {
+  const skillsPrompt = getSkillsSystemPrompt()
+  const instructions = [
+    '你是一个智能助手。当可用工具能够帮助你更准确地解决用户问题时，主动调用工具。',
+    skillsPrompt
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
   agent = new ToolLoopAgent({
     model: provider(process.env.LLM_MODEL || ''),
-    system: '你是一个智能助手。当可用工具能够帮助你更准确地解决用户问题时，主动调用工具。',
-    tools: { shell: shellTool, ...getAllMCPTools() }
+    instructions,
+    tools: { shell: shellTool, use_skill: useSkillTool, ...getAllMCPTools() }
   })
 }
 
@@ -39,8 +51,10 @@ app.use('/api/*', cors())
 
 app.post('/api/chat', async (c) => {
   const { messages }: { messages: UIMessage[] } = await c.req.json()
-  return createAgentUIStreamResponse({ agent, uiMessages: messages })
+  return createAgentUIStreamResponse({ agent, uiMessages: injectSkillFromCommand(messages) })
 })
+
+app.get('/api/skills', (c) => c.json(getSkillsList()))
 
 // MCP management API
 app.get('/api/mcp/servers', (c) => c.json(getServerStatuses()))
@@ -70,6 +84,10 @@ app.post('/api/mcp/servers/:name/reconnect', async (c) => {
 
 export async function startServer(port = 3315, userDataPath: string): Promise<number> {
   await initMCP(userDataPath)
+
+  // Load skills from ~/.agents/skills
+  initSkills(join(homedir(), '.agents', 'skills'))
+
   rebuildAgent()
 
   return new Promise((resolve) => {

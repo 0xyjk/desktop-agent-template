@@ -27,7 +27,8 @@ import {
   PromptInputSubmit
 } from '@renderer/components/ai-elements/prompt-input'
 import MCPSettings from './MCPSettings'
-import { useCallback, useState } from 'react'
+import SkillPicker from './SkillPicker'
+import { useCallback, useEffect, useState } from 'react'
 
 const API_URL = 'http://localhost:3315/api/chat'
 
@@ -49,6 +50,24 @@ export default function ChatWindow() {
 
   const handleTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => setText(e.target.value),
+    []
+  )
+
+  // Detect /skill-name prefix (no space yet = user is still picking)
+  const slashMatch = text.match(/^\/([a-z0-9-]*)$/)
+
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false)
+
+  // Open/close picker automatically when typing "/"
+  useEffect(() => {
+    setSkillPickerOpen(!!slashMatch)
+  }, [!!slashMatch]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSkillSelect = useCallback(
+    (name: string) => {
+      setText(`/${name} `)
+      setSkillPickerOpen(false)
+    },
     []
   )
 
@@ -162,6 +181,12 @@ export default function ChatWindow() {
           <PromptInputFooter>
             <PromptInputTools>
               <MCPSettings />
+              <SkillPicker
+                open={skillPickerOpen}
+                onOpenChange={setSkillPickerOpen}
+                initialQuery={slashMatch?.[1] ?? ''}
+                onSelect={handleSkillSelect}
+              />
             </PromptInputTools>
             <PromptInputSubmit status={status} />
           </PromptInputFooter>

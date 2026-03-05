@@ -72,7 +72,7 @@ let agent: ToolLoopAgent
 function rebuildAgent(): void {
   agent = new ToolLoopAgent({
     model: provider(process.env.LLM_MODEL || ''),
-    system: '你是一个智能助手。当可用工具能够帮助你更准确地解决用户问题时，主动调用工具。',
+    instructions: '你是一个智能助手。当可用工具能够帮助你更准确地解决用户问题时，主动调用工具。',
     tools: { shell: shellTool, ...getAllMCPTools() }
   })
 }
