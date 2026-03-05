@@ -28,14 +28,26 @@ import {
 } from '@renderer/components/ai-elements/prompt-input'
 import MCPSettings from './MCPSettings'
 import SkillPicker from './SkillPicker'
+import PythonResult from './PythonResult'
 import { useCallback, useEffect, useState } from 'react'
 
 const API_URL = 'http://localhost:3315/api/chat'
 
+/** Strip skill injection wrapper from user messages for clean display. */
+function getDisplayText(role: string, text: string): string {
+  if (role !== 'user') return text
+  const match = text.match(/^<skill name="([^"]+)">[\s\S]*?<\/skill>\n*([\s\S]*)$/)
+  if (!match) return text
+  const [, skillName, userRequest] = match
+  const req = userRequest.trim()
+  if (req && req !== `Execute the ${skillName} skill.`) return `/${skillName} ${req}`
+  return `/${skillName}`
+}
+
 export default function ChatWindow() {
   const [text, setText] = useState('')
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, stop } = useChat({
     transport: new DefaultChatTransport({ api: API_URL })
   })
 
@@ -103,7 +115,7 @@ export default function ChatWindow() {
                                 mode={isLastAssistant ? 'streaming' : 'static'}
                                 animated={isLastAssistant}
                               >
-                                {part.text}
+                                {getDisplayText(message.role, part.text)}
                               </MessageResponse>
                             )
                           case 'tool-shell': {
@@ -138,6 +150,19 @@ export default function ChatWindow() {
                                   </div>
                                 )}
                               </Terminal>
+                            )
+                          }
+                          case 'tool-execute_python': {
+                            const output = part.output as
+                              | { stdout?: string; stderr?: string; images?: string[]; error?: string | null }
+                              | undefined
+                            return (
+                              <PythonResult
+                                key={`${message.id}-${i}`}
+                                code={(part.input as { code?: string })?.code ?? ''}
+                                output={output}
+                                state={part.state}
+                              />
                             )
                           }
                           case 'dynamic-tool':
@@ -188,7 +213,7 @@ export default function ChatWindow() {
                 onSelect={handleSkillSelect}
               />
             </PromptInputTools>
-            <PromptInputSubmit status={status} />
+            <PromptInputSubmit status={status} onStop={stop} />
           </PromptInputFooter>
         </PromptInput>
       </div>

@@ -19,6 +19,7 @@ import {
   reconnectServer
 } from './mcp'
 import { initSkills, getSkillsSystemPrompt, useSkillTool, getSkillsList, injectSkillFromCommand } from './skills'
+import { pythonKernelTool, closeKernel } from './tools/python_kernel'
 
 const provider = createOpenAICompatible({
   name: 'custom',
@@ -42,7 +43,7 @@ function rebuildAgent(): void {
   agent = new ToolLoopAgent({
     model: provider(process.env.LLM_MODEL || ''),
     instructions,
-    tools: { shell: shellTool, use_skill: useSkillTool, ...getAllMCPTools() }
+    tools: { shell: shellTool, use_skill: useSkillTool, execute_python: pythonKernelTool, ...getAllMCPTools() }
   })
 }
 
@@ -98,4 +99,4 @@ export async function startServer(port = 3315, userDataPath: string): Promise<nu
   })
 }
 
-export { closeMCP }
+export { closeMCP, closeKernel }

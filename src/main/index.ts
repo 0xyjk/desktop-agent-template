@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { startServer, closeMCP } from './server'
+import { startServer, closeMCP, closeKernel } from './server'
 
 let serverPort: number
 
@@ -60,5 +60,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
+  closeKernel()
   await closeMCP()
 })
