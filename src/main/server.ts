@@ -1,8 +1,9 @@
 import { config } from 'dotenv'
 config()
 
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { homedir } from 'os'
+import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
@@ -30,11 +31,22 @@ const provider = createOpenAICompatible({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let agent: ToolLoopAgent<any, any, any>
 
+function getMemoryContent(): string {
+  const memPath = join(homedir(), '.agents', 'memory.md')
+  try {
+    return readFileSync(memPath, 'utf-8').trim()
+  } catch {
+    return ''
+  }
+}
+
 /** Rebuild agent with current tools and instructions. Called on startup and after MCP changes. */
 function rebuildAgent(): void {
+  const memoryContent = getMemoryContent()
   const skillsPrompt = getSkillsSystemPrompt()
   const instructions = [
     '你是一个智能助手。当可用工具能够帮助你更准确地解决用户问题时，主动调用工具。',
+    memoryContent ? `## 用户设置的全局上下文\n${memoryContent}` : '',
     skillsPrompt
   ]
     .filter(Boolean)
@@ -56,6 +68,19 @@ app.post('/api/chat', async (c) => {
 })
 
 app.get('/api/skills', (c) => c.json(getSkillsList()))
+
+app.get('/api/memory', (c) => {
+  return c.json({ content: getMemoryContent() })
+})
+
+app.put('/api/memory', async (c) => {
+  const { content } = await c.req.json<{ content: string }>()
+  const memPath = join(homedir(), '.agents', 'memory.md')
+  mkdirSync(dirname(memPath), { recursive: true })
+  writeFileSync(memPath, content, 'utf-8')
+  rebuildAgent()
+  return c.json({ ok: true })
+})
 
 // MCP management API
 app.get('/api/mcp/servers', (c) => c.json(getServerStatuses()))

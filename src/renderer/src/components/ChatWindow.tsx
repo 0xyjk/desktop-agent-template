@@ -27,6 +27,7 @@ import {
   PromptInputSubmit
 } from '@renderer/components/ai-elements/prompt-input'
 import MCPSettings from './MCPSettings'
+import MemoryEditor from './MemoryEditor'
 import SkillPicker from './SkillPicker'
 import PythonResult from './PythonResult'
 import { useCallback, useEffect, useState } from 'react'
@@ -206,6 +207,7 @@ export default function ChatWindow() {
           <PromptInputFooter>
             <PromptInputTools>
               <MCPSettings />
+              <MemoryEditor />
               <SkillPicker
                 open={skillPickerOpen}
                 onOpenChange={setSkillPickerOpen}
